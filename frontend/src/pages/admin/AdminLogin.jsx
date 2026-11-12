@@ -35,48 +35,59 @@ const AdminLogin = () => {
             <div className="admin-grid-overlay"></div>
 
             <div className="login-container" style={{
+                position: 'relative',
                 zIndex: 20,
-                padding: '3rem',
-                background: 'rgba(10,10,10,0.9)',
-                border: '1px solid rgba(255, 215, 0, 0.3)',
-                backdropFilter: 'blur(10px)',
+                padding: '2.5rem 2.25rem',
+                background: 'linear-gradient(180deg, #12131b 0%, #090a0f 100%)',
+                border: '2px solid #f27042',
+                borderRadius: '4px',
                 textAlign: 'center',
-                maxWidth: '400px',
+                maxWidth: '420px',
                 width: '100%',
-                boxShadow: '0 0 40px rgba(0,0,0,0.8)'
+                boxShadow: 'inset 0 0 0 3px #090a0f, inset 0 0 0 4px rgba(245, 165, 36, 0.35), 6px 6px 0 #4a1c10, 0 28px 70px rgba(0,0,0,0.85)'
             }}>
+                <span className="admin-toast-corner tl" style={{ width: '12px', height: '12px', borderColor: '#f5a524', top: '-6px', left: '-6px' }} aria-hidden="true" />
+                <span className="admin-toast-corner tr" style={{ width: '12px', height: '12px', borderColor: '#f5a524', top: '-6px', right: '-6px' }} aria-hidden="true" />
+                <span className="admin-toast-corner bl" style={{ width: '12px', height: '12px', borderColor: '#f5a524', bottom: '-6px', left: '-6px' }} aria-hidden="true" />
+                <span className="admin-toast-corner br" style={{ width: '12px', height: '12px', borderColor: '#f5a524', bottom: '-6px', right: '-6px' }} aria-hidden="true" />
+
                 <h1 style={{
-                    fontFamily: 'Orbitron',
-                    color: '#ffd700',
-                    marginBottom: '2rem',
-                    textShadow: '0 0 10px rgba(255, 215, 0, 0.5)'
+                    fontFamily: "'Anton', Impact, 'Arial Narrow Bold', sans-serif",
+                    fontSize: '2.1rem',
+                    letterSpacing: '0.1em',
+                    color: '#f5a524',
+                    marginBottom: '1.75rem',
+                    marginTop: 0,
+                    textShadow: '2px 2px 0 #3a150b'
                 }}>SYSTEM ACCESS</h1>
 
-                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     <input
                         type="password"
                         value={passcode}
                         onChange={(e) => setPasscode(e.target.value)}
                         placeholder="ENTER PASSCODE"
                         style={{
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid rgba(255, 215, 0, 0.2)',
-                            padding: '1rem',
-                            color: '#fff',
-                            fontFamily: 'Orbitron',
+                            background: 'rgba(8, 9, 14, 0.9)',
+                            border: '1.5px solid rgba(245, 165, 36, 0.4)',
+                            borderRadius: '3px',
+                            padding: '0.95rem 1rem',
+                            color: '#faf1dc',
+                            fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                            fontWeight: 700,
                             textAlign: 'center',
-                            letterSpacing: '2px',
-                            fontSize: '1.1rem',
+                            letterSpacing: '0.18em',
+                            fontSize: '1rem',
                             outline: 'none'
                         }}
                     />
 
-                    {error && <div style={{ color: '#ff003c', fontFamily: 'Orbitron', fontSize: '0.9rem' }}>{error}</div>}
+                    {error && <div style={{ color: '#f27042', fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, fontSize: '0.82rem' }}>{error}</div>}
 
                     <button
                         type="submit"
                         className="cyber-btn primary"
-                        style={{ padding: '1rem' }}
+                        style={{ padding: '0.95rem' }}
                         disabled={submitting}
                     >
                         {submitting ? 'VERIFYING...' : 'AUTHENTICATE'}

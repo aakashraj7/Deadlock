@@ -140,10 +140,10 @@ const CrackCodeAdmin = () => {
     };
 
     return (
-        <div className="admin-container">
+        <div className="crack-admin-container">
             <div className="admin-overlay"></div>
-            <div className="admin-content">
-                <header className="admin-header">
+            <div className="crack-admin-content">
+                <header className="crack-admin-header">
                     <div className="admin-label">SYSTEM ADMINISTRATOR</div>
                     <h1 className="admin-title">CRACK ENGINE CONTROL</h1>
                     <div className="admin-subtitle">GATEWAY: CRACK-THE-CODE // SESSION MANAGER</div>
