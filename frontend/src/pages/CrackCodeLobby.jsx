@@ -7,7 +7,7 @@ import './CrackCodeLobby.css';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:5000`;
 
-const CrackCodeLobby = ({ onGameReady }) => {
+const CrackCodeLobby = ({ onGameReady, onEliminatedChange }) => {
     const navigate = useNavigate();
     const [gameStatusLoading, setGameStatusLoading] = useState(true);
     const [teamStatus, setTeamStatus] = useState(null);
@@ -130,6 +130,30 @@ const CrackCodeLobby = ({ onGameReady }) => {
         return () => clearInterval(intervalId);
     }, [teamId, onGameReady]);
 
+    const result = teamStatus?.deadlockResult;
+    const isWinner = result === 'win' || result === 'winner';
+    const isLoser = result === 'lose' || result === 'eliminated';
+    const isOpen = isWinner && globalStarted;
+
+    useEffect(() => {
+        if (!onEliminatedChange) return;
+        onEliminatedChange(isLoser);
+    }, [isLoser, onEliminatedChange]);
+
+    useEffect(() => {
+        if (!isLoser) return;
+        const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        if (!fsEl) return;
+        const exitFs = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if (exitFs) {
+            try {
+                Promise.resolve(exitFs.call(document)).catch(() => {});
+            } catch {
+                // Ignore fullscreen exit errors
+            }
+        }
+    }, [isLoser]);
+
     if (gameStatusLoading) {
         return (
             <div className="goat-page loading-screen">
@@ -156,11 +180,6 @@ const CrackCodeLobby = ({ onGameReady }) => {
             </div>
         );
     }
-
-    const result = teamStatus?.deadlockResult;
-    const isWinner = result === 'win' || result === 'winner';
-    const isLoser = result === 'lose';
-    const isOpen = isWinner && globalStarted;
 
     const pageClasses = [
         "goat-page",
