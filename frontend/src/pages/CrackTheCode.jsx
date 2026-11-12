@@ -123,12 +123,12 @@ const GameHeader = React.memo(({ teamName, initialTime, isGameStarted, submissio
                         className="glitch-activate-btn"
                         onClick={onActivateGlitch}
                     >
-                        Use First Blood Skill
+                        Use Awakening Skill
                     </button>
                 )}
                 {glitchStatus?.active && (
                     <div className="arena-attack-notice">
-                        SYSTEM UNDER ATTACK
+                        AWAKENING ACTIVE
                     </div>
                 )}
 
@@ -339,13 +339,41 @@ const CrackTheCode = () => {
                     }
                 }
 
-                // 2. Check Glitch Status
-                const res = await fetch(`${BASE_URL}/api/public/glitch/status`);
+                // 1b. Check Team-Specific Session (handles single-team Terminate or Promote Win)
+                const teamId = localStorage.getItem("teamId");
+                if (isGameStarted && teamId && !submissionResult) {
+                    const teamSessionRes = await fetch(`${BASE_URL}/api/public/crack-code/session/${teamId}?cb=${Date.now()}`);
+                    if (teamSessionRes.status === 403 || teamSessionRes.status === 404) {
+                        setIsDismissed(true);
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 5000);
+                        return;
+                    }
+                    if (teamSessionRes.ok) {
+                        const teamSessionData = await teamSessionRes.json();
+                        if (teamSessionData.submission) {
+                            setSubmissionResult(teamSessionData.submission);
+                            return;
+                        }
+                        if (teamSessionData.endedAt) {
+                            setIsDismissed(true);
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 5000);
+                            return;
+                        }
+                    }
+                }
+
+                // 2. Check Awakening (Glitch) Status
+                const res = await fetch(`${BASE_URL}/api/public/glitch/status?cb=${Date.now()}`);
                 if (res.ok) {
                     const data = await res.json();
                     setGlitchStatus({
                         active: data.active,
                         ownerId: data.ownerId,
+                        ownerName: data.ownerName || null,
                         glitchUsed: data.glitchUsed,
                         remainingTime: data.remainingTime
                     });
@@ -364,7 +392,7 @@ const CrackTheCode = () => {
         const teamId = localStorage.getItem("teamId");
         if (!teamId) return;
 
-        if (!window.confirm("WARNING: INITIATING CYBER-ATTACK WILL DISRUPT ALL OPPONENTS FOR 15 SECONDS. EXECUTE?")) return;
+        if (!window.confirm("WARNING: INITIATING AWAKENING WILL DISRUPT ALL OPPONENTS FOR 15 SECONDS. EXECUTE?")) return;
 
         try {
             const res = await fetch(`${BASE_URL}/api/public/glitch/activate`, {
@@ -374,12 +402,18 @@ const CrackTheCode = () => {
             });
             const data = await res.json();
             if (data.success) {
-                alert("CYBER-ATTACK INITIATED. TARGETS LOCKED.");
+                setGlitchStatus((prev) => ({
+                    ...prev,
+                    active: true,
+                    glitchUsed: true,
+                    remainingTime: data.remainingTime || 15
+                }));
+                alert("AWAKENING INITIATED. OPPONENTS LOCKED FOR 15 SECONDS.");
             } else {
                 alert("ACTIVATION FAILED: " + data.message);
             }
         } catch (err) {
-            console.error("Glitch activation error:", err);
+            console.error("Awakening activation error:", err);
             alert("SYSTEM ERROR");
         }
     };
@@ -779,7 +813,7 @@ const CrackTheCode = () => {
 
             {isVictim && !isDismissed && (
                 <GlitchOverlay
-                    ownerName={glitchStatus?.ownerId ? "RIVAL TEAM" : "UNKNOWN"}
+                    ownerName={glitchStatus?.ownerName || (glitchStatus?.ownerId ? "RIVAL TEAM" : "UNKNOWN")}
                     remaining={glitchStatus?.remainingTime}
                 />
             )}

@@ -28,6 +28,10 @@ const teamSchema = new mongoose.Schema({
         enum: ['pending', 'win', 'lose'],
         default: 'pending'
     },
+    crackCodeManuallyAdded: {
+        type: Boolean,
+        default: false
+    },
     currentQuestionIndex: {
         type: Number,
         default: 0

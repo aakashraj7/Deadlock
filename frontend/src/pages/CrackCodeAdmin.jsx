@@ -14,53 +14,64 @@ const CrackCodeAdmin = () => {
     const [activeQuestionId, setActiveQuestionId] = useState(null);
     const [questionError, setQuestionError] = useState(null);
     const [questionsUnavailable, setQuestionsUnavailable] = useState(false);
+    const [teams, setTeams] = useState([]);
+    const [teamSearch, setTeamSearch] = useState('');
+    const [teamActionId, setTeamActionId] = useState(null);
 
-    React.useEffect(() => {
-        document.title = "Crack Code // Admin";
-        const fetchStatus = async () => {
-            try {
-                // Check eligible teams
-                const eligibleRes = await fetch(`${BASE_URL}/api/public/crack-code/eligible-teams`);
-                const eligibleData = await eligibleRes.json();
-                setEligibleCount(eligibleData.count || 0);
+    const fetchStatus = React.useCallback(async () => {
+        try {
+            // Check eligible teams
+            const eligibleRes = await fetch(`${BASE_URL}/api/public/crack-code/eligible-teams`);
+            const eligibleData = await eligibleRes.json();
+            setEligibleCount(eligibleData.count || 0);
 
-                // Check global session status
-                const statusRes = await fetch(`${BASE_URL}/api/public/crack-code/global-status`);
-                const statusData = await statusRes.json();
-                setIsSessionActive(statusData.started);
+            // Check global session status
+            const statusRes = await fetch(`${BASE_URL}/api/public/crack-code/global-status`);
+            const statusData = await statusRes.json();
+            setIsSessionActive(statusData.started);
 
-                // Question bank + current selection
-                const questionsRes = await adminFetch(`${BASE_URL}/api/admin/crack-code/questions`);
-                if (questionsRes.ok) {
-                    const questionsData = await questionsRes.json();
-                    setQuestions(questionsData.questions || []);
-                    setSelectedQuestionId(questionsData.selectedQuestionId);
-                    setActiveQuestionId(questionsData.activeQuestionId);
-                    setQuestionsUnavailable(false);
-                } else {
-                    setQuestionsUnavailable(true);
-                }
+            // Question bank + current selection
+            const questionsRes = await adminFetch(`${BASE_URL}/api/admin/crack-code/questions`);
+            if (questionsRes.ok) {
+                const questionsData = await questionsRes.json();
+                setQuestions(questionsData.questions || []);
+                setSelectedQuestionId(questionsData.selectedQuestionId);
+                setActiveQuestionId(questionsData.activeQuestionId);
+                setQuestionsUnavailable(false);
+            } else {
+                setQuestionsUnavailable(true);
+            }
 
-                // Fetch winner info if session is active
-                if (statusData.started) {
-                    const winnerRes = await adminFetch(`${BASE_URL}/api/admin/crack-code/winner-info`);
-                    const winnerData = await winnerRes.json();
-                    if (winnerData.winnerFound) {
-                        setWinnerInfo(winnerData);
-                    } else {
-                        setWinnerInfo(null);
-                    }
+            // Team roster + eligibility + active session state
+            const teamsRes = await adminFetch(`${BASE_URL}/api/admin/crack-code/teams`);
+            if (teamsRes.ok) {
+                const teamsData = await teamsRes.json();
+                setTeams(teamsData.teams || []);
+            }
+
+            // Fetch winner info if session is active
+            if (statusData.started) {
+                const winnerRes = await adminFetch(`${BASE_URL}/api/admin/crack-code/winner-info`);
+                const winnerData = await winnerRes.json();
+                if (winnerData.winnerFound) {
+                    setWinnerInfo(winnerData);
                 } else {
                     setWinnerInfo(null);
                 }
-            } catch (e) {
-                console.error("Failed to fetch status", e);
+            } else {
+                setWinnerInfo(null);
             }
-        };
+        } catch (e) {
+            console.error("Failed to fetch status", e);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        document.title = "Crack Code // Admin";
         fetchStatus();
         const interval = setInterval(fetchStatus, 3000);
         return () => clearInterval(interval);
-    }, []);
+    }, [fetchStatus]);
 
     const handleSelectQuestion = async (questionId) => {
         if (isSessionActive || questionId === selectedQuestionId) return;
@@ -138,6 +149,83 @@ const CrackCodeAdmin = () => {
             setLoading(false);
         }
     };
+
+    const handleToggleEligibility = async (team) => {
+        const nextEligible = !team.eligible;
+        if (!nextEligible && team.sessionActive) {
+            if (!window.confirm(`Remove "${team.name}" from Crack the Code and end their live session?`)) return;
+        }
+        setTeamActionId(team._id);
+        try {
+            const response = await adminFetch(`${BASE_URL}/api/admin/crack-code/teams/${team._id}/eligibility`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ eligible: nextEligible }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                setStatus({ type: 'success', message: data.message || `Updated "${team.name}" eligibility.` });
+                await fetchStatus();
+            } else {
+                setStatus({ type: 'error', message: data.message || 'Failed to update team eligibility.' });
+            }
+        } catch {
+            setStatus({ type: 'error', message: 'NETWORK INTERRUPT: ELIGIBILITY UPDATE FAILED.' });
+        } finally {
+            setTeamActionId(null);
+        }
+    };
+
+    const handlePromoteWin = async (team) => {
+        if (!window.confirm(`Promote "${team.name}" as the Crack the Code WINNER?`)) return;
+        setTeamActionId(team._id);
+        try {
+            const response = await adminFetch(`${BASE_URL}/api/admin/crack-code/teams/${team._id}/promote-win`, {
+                method: 'POST',
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                setStatus({ type: 'success', message: data.message || `"${team.name}" promoted as winner.` });
+                await fetchStatus();
+            } else {
+                setStatus({ type: 'error', message: data.message || 'Failed to promote winner.' });
+            }
+        } catch {
+            setStatus({ type: 'error', message: 'NETWORK INTERRUPT: PROMOTE WIN FAILED.' });
+        } finally {
+            setTeamActionId(null);
+        }
+    };
+
+    const handleTerminateTeam = async (team) => {
+        if (!window.confirm(`Terminate active session for "${team.name}"? They will be removed from the live round.`)) return;
+        setTeamActionId(team._id);
+        try {
+            const response = await adminFetch(`${BASE_URL}/api/admin/crack-code/teams/${team._id}/terminate`, {
+                method: 'POST',
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                setStatus({ type: 'success', message: data.message || `Terminated "${team.name}".` });
+                await fetchStatus();
+            } else {
+                setStatus({ type: 'error', message: data.message || 'Failed to terminate team session.' });
+            }
+        } catch {
+            setStatus({ type: 'error', message: 'NETWORK INTERRUPT: TERMINATE FAILED.' });
+        } finally {
+            setTeamActionId(null);
+        }
+    };
+
+    const filteredTeams = teams.filter((t) => {
+        const q = teamSearch.trim().toLowerCase();
+        if (!q) return true;
+        return (
+            t.name.toLowerCase().includes(q) ||
+            (t.members || []).some((m) => m.toLowerCase().includes(q))
+        );
+    });
 
     return (
         <div className="crack-admin-container">
@@ -279,6 +367,107 @@ const CrackCodeAdmin = () => {
                             )}
                         </div>
                     )}
+
+                    {status && (
+                        <div className={`status-terminal ${status.type}`}>
+                            <div className="terminal-header">SYSTEM_FEEDBACK://LOG</div>
+                            <div className="terminal-body">
+                                <span className="terminal-prompt">&gt; </span>{status.message}
+                            </div>
+                        </div>
+                    )}
+
+                    <section className="team-roster-panel">
+                        <div className="roster-toolbar">
+                            <div className="roster-title-group">
+                                <span className="roster-title">TEAM ROSTER // ELIGIBILITY & SESSION CONTROL</span>
+                                <span className="roster-counts">
+                                    {eligibleCount} ELIGIBLE · {teams.length} TOTAL
+                                </span>
+                            </div>
+                            <input
+                                type="text"
+                                className="roster-search"
+                                placeholder="Search team or member..."
+                                value={teamSearch}
+                                onChange={(e) => setTeamSearch(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="roster-list">
+                            {filteredTeams.length === 0 ? (
+                                <div className="roster-empty">NO TEAMS MATCH CURRENT FILTER.</div>
+                            ) : (
+                                filteredTeams.map((team) => {
+                                    const busy = teamActionId === team._id || loading;
+                                    const statusBadge = team.isWinner
+                                        ? { label: 'WINNER', cls: 'winner' }
+                                        : team.sessionActive
+                                            ? { label: 'PLAYING', cls: 'playing' }
+                                            : team.hasSession && team.sessionEndedAt
+                                                ? { label: 'ENDED', cls: 'ended' }
+                                                : team.eligible
+                                                    ? (team.manuallyAdded
+                                                        ? { label: 'ADDED', cls: 'added' }
+                                                        : { label: 'ELIGIBLE', cls: 'eligible' })
+                                                    : { label: 'EXCLUDED', cls: 'excluded' };
+
+                                    return (
+                                        <div key={team._id} className={`roster-row ${team.eligible ? 'is-eligible' : ''}`}>
+                                            <div className="roster-team-info">
+                                                <div className="roster-team-top">
+                                                    <span className="roster-team-name">{team.name}</span>
+                                                    <span className={`roster-status-badge ${statusBadge.cls}`}>
+                                                        {statusBadge.label}
+                                                    </span>
+                                                    {team.eligible && team.manuallyAdded && statusBadge.cls !== 'added' && (
+                                                        <span className="roster-status-badge added">ADDED</span>
+                                                    )}
+                                                </div>
+                                                <div className="roster-team-members">
+                                                    {(team.members || []).join(' · ') || 'No members'}
+                                                </div>
+                                            </div>
+
+                                            <div className="roster-actions">
+                                                <button
+                                                    type="button"
+                                                    className={`roster-btn ${team.eligible ? 'remove' : 'add'}`}
+                                                    onClick={() => handleToggleEligibility(team)}
+                                                    disabled={busy}
+                                                >
+                                                    {team.eligible ? 'REMOVE' : '+ ADD'}
+                                                </button>
+
+                                                {team.sessionActive && (
+                                                    <button
+                                                        type="button"
+                                                        className="roster-btn terminate"
+                                                        onClick={() => handleTerminateTeam(team)}
+                                                        disabled={busy}
+                                                    >
+                                                        TERMINATE
+                                                    </button>
+                                                )}
+
+                                                {!team.isWinner && (
+                                                    <button
+                                                        type="button"
+                                                        className="roster-btn promote"
+                                                        onClick={() => handlePromoteWin(team)}
+                                                        disabled={busy || !!(winnerInfo && winnerInfo.winnerFound)}
+                                                        title={winnerInfo && winnerInfo.winnerFound ? 'Reset systems first to change winner' : 'Promote this team as Crack the Code winner'}
+                                                    >
+                                                        PROMOTE WIN
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </section>
                 </div>
 
                 <footer className="admin-footer">

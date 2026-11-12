@@ -438,6 +438,13 @@ exports.solveProblem = async (req, res) => {
                 deadlockResult: "lose"
             });
 
+            // Atomic Awakening (First Blood) assignment
+            await GameState.get();
+            await GameState.updateOne(
+                { key: 'GLOBAL_STATE', firstBloodTeamId: null },
+                { $set: { firstBloodTeamId: winner } }
+            );
+
             return res.json({
                 success: true,
                 message: "Match won! Team advanced to Crack the Code",

@@ -192,4 +192,214 @@ router.delete("/reset", async (req, res) => {
   }
 });
 
+/*
+  GET /admin/crack-code/teams
+  - Lists all teams with Crack the Code eligibility, session state, and submission/winner status
+*/
+router.get("/teams", async (req, res) => {
+  try {
+    const [teams, sessions, submissions] = await Promise.all([
+      Team.find().select("name members deadlockResult currentRound crackCodeManuallyAdded").sort({ name: 1 }).lean(),
+      CrackCodeSession.find().lean(),
+      CrackCodeSubmission.find().lean(),
+    ]);
+
+    const sessionByTeam = new Map(sessions.map((s) => [String(s.teamId), s]));
+    const submissionByTeam = new Map(submissions.map((sub) => [String(sub.teamId), sub]));
+
+    const formatted = teams
+      .map((team) => {
+        const id = String(team._id);
+        const session = sessionByTeam.get(id) || null;
+        const submission = submissionByTeam.get(id) || null;
+        return {
+          _id: team._id,
+          name: team.name,
+          members: team.members || [],
+          deadlockResult: team.deadlockResult,
+          currentRound: team.currentRound,
+          eligible: team.deadlockResult === "win",
+          manuallyAdded: !!team.crackCodeManuallyAdded,
+          hasSession: !!session,
+          sessionActive: !!(session && !session.endedAt),
+          sessionEndedAt: session?.endedAt || null,
+          hasSubmission: !!submission,
+          isWinner: !!submission?.finalWinner,
+          isCorrect: !!submission?.isCorrect,
+        };
+      })
+      .sort((a, b) => {
+        if (a.isWinner !== b.isWinner) return a.isWinner ? -1 : 1;
+        if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    return res.json({
+      sessionActive: sessions.length > 0,
+      teams: formatted,
+    });
+  } catch (error) {
+    console.error("CrackCode TEAMS error:", error);
+    return res.status(500).json({ message: "Internal server error while fetching teams" });
+  }
+});
+
+/*
+  POST /admin/crack-code/teams/:teamId/eligibility
+  Body: { eligible: boolean }
+  - Adds or removes a team from Crack the Code eligibility.
+  - If a session is already running and eligible=true, creates/reopens a CrackCodeSession for them.
+  - If eligible=false, removes their active CrackCodeSession (if any) and marks them eliminated.
+*/
+router.post("/teams/:teamId/eligibility", async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const { eligible } = req.body || {};
+
+    const team = await Team.findById(teamId);
+    if (!team) {
+      return res.status(404).json({ message: "Team not found" });
+    }
+
+    if (eligible) {
+      team.deadlockResult = "win";
+      team.currentRound = "crack-the-code";
+      team.crackCodeManuallyAdded = true;
+      await team.save();
+
+      const anySession = await CrackCodeSession.findOne().select("questionId startedAt");
+      if (anySession) {
+        const existing = await CrackCodeSession.findOne({ teamId: team._id });
+        if (existing) {
+          existing.endedAt = null;
+          await existing.save();
+        } else {
+          await CrackCodeSession.create({
+            teamId: team._id,
+            questionId: anySession.questionId || (await getSelectedQuestionId()),
+            attemptsUsed: 0,
+            startedAt: anySession.startedAt || new Date(),
+          });
+        }
+      }
+
+      return res.json({
+        message: `Team "${team.name}" added to Crack the Code`,
+        eligible: true,
+      });
+    } else {
+      team.deadlockResult = "lose";
+      team.currentRound = "eliminated";
+      team.crackCodeManuallyAdded = false;
+      await team.save();
+
+      await CrackCodeSession.deleteMany({ teamId: team._id });
+
+      return res.json({
+        message: `Team "${team.name}" removed from Crack the Code`,
+        eligible: false,
+      });
+    }
+  } catch (error) {
+    console.error("CrackCode ELIGIBILITY error:", error);
+    return res.status(500).json({ message: "Internal server error while updating team eligibility" });
+  }
+});
+
+/*
+  POST /admin/crack-code/teams/:teamId/promote-win
+  - Promotes a team as the Crack the Code winner (if no winner is already crowned)
+*/
+router.post("/teams/:teamId/promote-win", async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const team = await Team.findById(teamId);
+    if (!team) {
+      return res.status(404).json({ message: "Team not found" });
+    }
+
+    const existingWinner = await CrackCodeSubmission.findOne({ finalWinner: true }).populate("teamId", "name");
+    if (existingWinner && String(existingWinner.teamId?._id || existingWinner.teamId) !== String(team._id)) {
+      return res.status(409).json({
+        message: `Winner already crowned (${existingWinner.teamId?.name || "another team"}). Reset systems first to change winner.`,
+      });
+    }
+
+    team.deadlockResult = "win";
+    team.currentRound = "crack-the-code";
+    await team.save();
+
+    const anySession = await CrackCodeSession.findOne().select("questionId startedAt");
+    const questionId = anySession?.questionId || (await getSelectedQuestionId());
+    let session = await CrackCodeSession.findOne({ teamId: team._id });
+    if (!session) {
+      session = await CrackCodeSession.create({
+        teamId: team._id,
+        questionId,
+        attemptsUsed: 0,
+        startedAt: anySession?.startedAt || new Date(),
+        endedAt: new Date(),
+      });
+    } else {
+      session.endedAt = new Date();
+      await session.save();
+    }
+
+    await CrackCodeSubmission.findOneAndUpdate(
+      { teamId: team._id, crackCodeSessionId: session._id },
+      {
+        $set: {
+          isCorrect: true,
+          finalWinner: true,
+          submittedAt: new Date(),
+        },
+        $setOnInsert: {
+          submittedLogic: "// ADMIN_PROMOTED_WIN",
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    return res.json({
+      message: `Team "${team.name}" promoted as Crack the Code winner`,
+    });
+  } catch (error) {
+    console.error("CrackCode PROMOTE-WIN error:", error);
+    return res.status(500).json({ message: "Internal server error while promoting winner" });
+  }
+});
+
+/*
+  POST /admin/crack-code/teams/:teamId/terminate
+  - Terminates an already-playing team's Crack the Code session and removes them from the active round
+*/
+router.post("/teams/:teamId/terminate", async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const team = await Team.findById(teamId);
+    if (!team) {
+      return res.status(404).json({ message: "Team not found" });
+    }
+
+    const session = await CrackCodeSession.findOne({ teamId: team._id });
+    if (!session) {
+      return res.status(404).json({ message: `No active Crack the Code session found for "${team.name}"` });
+    }
+
+    session.endedAt = new Date();
+    await session.save();
+
+    team.deadlockResult = "lose";
+    team.currentRound = "eliminated";
+    await team.save();
+
+    return res.json({
+      message: `Active session terminated for "${team.name}"`,
+    });
+  } catch (error) {
+    console.error("CrackCode TERMINATE error:", error);
+    return res.status(500).json({ message: "Internal server error while terminating team session" });
+  }
+});
+
 module.exports = router;

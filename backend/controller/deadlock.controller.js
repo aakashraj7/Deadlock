@@ -1,5 +1,6 @@
 const DeadlockMatch = require("../model/deadlock.model");
 const Team = require("../model/team.model");
+const GameState = require("../model/gameState.model");
 
 exports.solveProblem = async (req, res) => {
     try {
@@ -47,6 +48,13 @@ exports.solveProblem = async (req, res) => {
                 currentRound: "eliminated",
                 deadlockResult: "lose"
             });
+
+            // Atomic Awakening (First Blood) assignment
+            await GameState.get();
+            await GameState.updateOne(
+                { key: 'GLOBAL_STATE', firstBloodTeamId: null },
+                { $set: { firstBloodTeamId: winner } }
+            );
 
             return res.json({
                 success: true,
