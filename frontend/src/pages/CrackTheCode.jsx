@@ -199,7 +199,8 @@ import DismissalOverlay from '../components/crack/DismissalOverlay';
 
 const CrackTheCode = () => {
     const teamName = localStorage.getItem('teamName') || 'UNKNOWN';
-    const { security, reportAction } = useSecurity(teamName);
+    const [isEliminated, setIsEliminated] = useState(false);
+    const { security, reportAction } = useSecurity(teamName, { passive: isEliminated });
 
     const [language, setLanguage] = useState('python');
 
@@ -615,7 +616,10 @@ const CrackTheCode = () => {
         && lastValidated.code === (latestCodeRef.current[language] ?? codeMap[language]);
 
     if (!isGameStarted) {
-        return <CrackCodeLobby onGameReady={(sessionData) => {
+        return <CrackCodeLobby
+            onEliminatedChange={setIsEliminated}
+            onGameReady={(sessionData) => {
+                setIsEliminated(false);
             if (sessionData && sessionData.startedAt) {
                 const startTime = new Date(sessionData.startedAt).getTime();
                 const now = Date.now();

@@ -144,7 +144,10 @@ async function getMembersFromLOCDatabase(team) {
  * Render a single certificate buffer using @napi-rs/canvas
  */
 async function renderCertificateBuffer(templateImg, memberName) {
-    const canvas = createCanvas(templateImg.width, templateImg.height);
+    const w = templateImg.width;
+    const h = templateImg.height;
+    const scale = w / 1024;
+    const canvas = createCanvas(w, h);
     const ctx = canvas.getContext("2d");
 
     // 1. Draw base template
@@ -152,28 +155,40 @@ async function renderCertificateBuffer(templateImg, memberName) {
 
     // 2. Clear placeholder "Participant Name _"
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(200, 680, 1600, 140);
+    ctx.fillRect(
+        Math.round(w * 0.12),
+        Math.round(h * 0.485),
+        Math.round(w * 0.76),
+        Math.round(h * 0.09)
+    );
 
-    // 3. Setup font
-    ctx.font = "80px Pixelon";
-    ctx.fillStyle = "#000000";
+    // 3. Setup font (auto-fit long names within horizontal bounds)
+    let fontSize = Math.round(42 * scale);
+    const minFontSize = Math.round(24 * scale);
+    const gap = Math.round(14 * scale);
+    const cursorW = Math.round(20 * scale);
+    const cursorH = Math.round(8 * scale);
+    const maxTotalW = w * 0.78;
 
-    const metrics = ctx.measureText(memberName);
-    const textW = metrics.width;
-    const gap = 26;
-    const cursorW = 38;
-    const cursorH = 16;
+    ctx.font = `${fontSize}px Pixelon`;
+    let textW = ctx.measureText(memberName).width;
+    while (textW + gap + cursorW > maxTotalW && fontSize > minFontSize) {
+        fontSize -= 2;
+        ctx.font = `${fontSize}px Pixelon`;
+        textW = ctx.measureText(memberName).width;
+    }
+
     const totalW = textW + gap + cursorW;
-
-    const x = (2000 - totalW) / 2.0;
-    const y = 776.0; // baseline
+    const x = (w - totalW) / 2.0;
+    const y = h * 0.553; // baseline
 
     // 4. Draw member name
+    ctx.fillStyle = "#000000";
     ctx.fillText(memberName, x, y);
 
     // 5. Draw orange terminal cursor
-    ctx.fillStyle = "#FF7A50";
-    ctx.fillRect(x + textW + gap, 763.0, cursorW, cursorH);
+    ctx.fillStyle = "#F47E59";
+    ctx.fillRect(x + textW + gap, y - Math.round(9 * scale), cursorW, cursorH);
 
     return canvas.toBuffer("image/png");
 }
@@ -206,11 +221,12 @@ async function generateTeamCertificates(teamId) {
 
     const outputZip = path.join(CACHE_DIR, `${teamId}.zip`);
 
-    // 3. Check if cached zip already exists and is recent
+    // 3. Check if cached zip already exists and is newer than both team data and template
     if (fs.existsSync(outputZip)) {
         const stats = fs.statSync(outputZip);
         const teamUpdated = new Date(team.updatedAt || 0).getTime();
-        if (stats.size > 1000 && stats.mtimeMs > teamUpdated) {
+        const templateMtime = fs.statSync(templatePath).mtimeMs;
+        if (stats.size > 1000 && stats.mtimeMs > Math.max(teamUpdated, templateMtime)) {
             return {
                 filePath: outputZip,
                 filename: `${sanitizeFilename(team.name)}_Certificates.zip`,
@@ -252,4 +268,5 @@ async function generateTeamCertificates(teamId) {
 module.exports = {
     generateTeamCertificates,
     getMembersFromLOCDatabase,
+    renderCertificateBuffer,
 };

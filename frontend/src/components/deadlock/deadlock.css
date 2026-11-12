@@ -1065,41 +1065,200 @@ html {
 /* ========================================================
    5. MATCH RESULT & DISMISSED VIEWS
 ======================================================== */
+@keyframes locResCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes locResCursorBlink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0.25;
+  }
+}
+
 .arena-result-view {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
-  background-color: var(--base-bg);
+  background:
+    radial-gradient(55vw 55vh at 50% 48%, rgba(242, 112, 66, 0.14), transparent 72%),
+    repeating-linear-gradient(0deg, rgba(245, 165, 36, 0.025) 0 1px, transparent 1px 24px),
+    repeating-linear-gradient(90deg, rgba(245, 165, 36, 0.025) 0 1px, transparent 1px 24px),
+    #08090c;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
   padding: 1.5rem;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+
+.arena-result-view.winner {
+  background:
+    radial-gradient(55vw 55vh at 50% 48%, rgba(61, 220, 132, 0.12), transparent 72%),
+    repeating-linear-gradient(0deg, rgba(245, 165, 36, 0.025) 0 1px, transparent 1px 24px),
+    repeating-linear-gradient(90deg, rgba(245, 165, 36, 0.025) 0 1px, transparent 1px 24px),
+    #08090c;
 }
 
 .arena-result-card {
   position: relative;
   z-index: 10;
   width: 100%;
-  max-width: 620px;
-  padding: 2.75rem 2.25rem;
-  border-radius: 12px;
-  background: var(--surface-panel);
-  border: 1px solid var(--surface-border);
+  max-width: 540px;
+  padding: 2.25rem 2rem 2rem;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #12131b 0%, #090a0f 100%);
+  border: 2px solid #f27042;
+  box-shadow:
+    inset 0 0 0 3px #090a0f,
+    inset 0 0 0 4px rgba(245, 165, 36, 0.35),
+    6px 6px 0 #4a1c10,
+    0 28px 70px rgba(0, 0, 0, 0.85);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.15rem;
+  gap: 0.9rem;
+  color: #faf1dc;
+  animation: locResCardIn 0.28s cubic-bezier(0.22, 1.18, 0.36, 1) both;
 }
 
 .arena-result-card.winner {
-  border-color: rgba(61, 220, 132, 0.3);
+  border-color: #3ddc84;
+  box-shadow:
+    inset 0 0 0 3px #090a0f,
+    inset 0 0 0 4px rgba(61, 220, 132, 0.3),
+    6px 6px 0 #123c24,
+    0 28px 70px rgba(0, 0, 0, 0.85);
 }
 
 .arena-result-card.loser {
-  border-color: rgba(245, 162, 31, 0.3);
+  border-color: #f27042;
+}
+
+.loc-res-corner {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: #f5a524;
+  border-style: solid;
+  pointer-events: none;
+}
+
+.loc-res-corner.tl { top: -6px; left: -6px; border-width: 2px 0 0 2px; }
+.loc-res-corner.tr { top: -6px; right: -6px; border-width: 2px 2px 0 0; }
+.loc-res-corner.bl { bottom: -6px; left: -6px; border-width: 0 0 2px 2px; }
+.loc-res-corner.br { bottom: -6px; right: -6px; border-width: 0 2px 2px 0; }
+
+.loc-res-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 0.35rem;
+}
+
+.loc-res-bracket {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.loc-res-dash {
+  width: 16px;
+  height: 3px;
+  background: #f5a524;
+  border-radius: 1px;
+}
+
+.loc-res-hook {
+  width: 10px;
+  height: 10px;
+  border-top: 2.5px solid #f5a524;
+}
+
+.loc-res-hook.left {
+  border-left: 2.5px solid #f5a524;
+}
+
+.loc-res-hook.right {
+  border-right: 2.5px solid #f5a524;
+}
+
+.loc-res-parallelogram {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: #faf1dc;
+  color: #16110e;
+  border: 2px solid #f5a524;
+  box-shadow: 3px 3px 0 #b8680a;
+  transform: skewX(-16deg);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.loc-res-parallelogram > * {
+  transform: skewX(16deg);
+}
+
+.loc-res-title-top {
+  font-family: 'Anton', Impact, 'Arial Narrow Bold', sans-serif;
+  font-size: clamp(2.15rem, 5vw, 2.75rem);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.loc-res-title-top.loser {
+  color: #f27042;
+  text-shadow:
+    2px 2px 0 #3a150b,
+    0 0 20px rgba(242, 112, 66, 0.38);
+}
+
+.loc-res-title-top.winner {
+  color: #3ddc84;
+  text-shadow:
+    2px 2px 0 #0d2e1b,
+    0 0 20px rgba(61, 220, 132, 0.35);
+}
+
+.loc-res-title-sub {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'Anton', Impact, 'Arial Narrow Bold', sans-serif;
+  font-size: clamp(1.35rem, 3.2vw, 1.75rem);
+  line-height: 1.05;
+  letter-spacing: 0.12em;
+  color: #faf1dc;
+  text-shadow: 2px 2px 0 #1f1a16;
+  margin-bottom: 0.2rem;
+}
+
+.loc-res-underscore {
+  display: inline-block;
+  width: 14px;
+  height: 4px;
+  background: #f5a524;
+  box-shadow: 0 0 8px rgba(245, 165, 36, 0.7);
+  animation: locResCursorBlink 1s steps(1) infinite;
 }
 
 .result-crown-badge,
@@ -1123,11 +1282,7 @@ html {
   color: var(--status-green);
 }
 
-.result-phase-pill.loser {
-  background: rgba(245, 162, 31, 0.12);
-  color: var(--accent-celestius);
-}
-
+.result-phase-pill.loser,
 .result-phase-pill.warning {
   background: rgba(245, 162, 31, 0.12);
   color: var(--accent-celestius);
@@ -1143,102 +1298,116 @@ html {
   line-height: 1.25;
 }
 
-.result-main-title.winner {
-  color: var(--status-green);
-}
-
-.result-main-title.loser {
-  color: var(--accent-celestius);
-}
-
 .result-main-title.warning {
   color: var(--accent-celestius);
 }
 
 .result-subtitle {
   margin: 0;
-  font-size: 0.9rem;
-  color: var(--text-muted);
-  max-width: 480px;
-  line-height: 1.55;
+  font-size: 0.82rem;
+  color: #b7b1a6;
+  max-width: 44ch;
+  line-height: 1.65;
+  letter-spacing: 0.03em;
 }
 
 .team-highlight {
-  color: var(--text-primary);
-  font-weight: 700;
+  color: #f5a524;
+  font-weight: 800;
 }
 
 .result-stats-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  max-width: 400px;
-  background: var(--surface-subtle);
-  border-radius: 6px;
-  padding: 0.85rem 1.15rem;
+  max-width: 420px;
+  background: rgba(8, 9, 14, 0.85);
+  border: 1px solid rgba(245, 165, 36, 0.25);
+  border-radius: 3px;
+  padding: 0.95rem 1.2rem;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
 .stat-line {
   display: flex;
   justify-content: space-between;
-  font-size: 0.8rem;
-  font-weight: 600;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .stat-label {
-  color: var(--text-muted);
+  color: #8b857b;
 }
 
 .stat-val {
-  color: var(--text-primary);
+  color: #faf1dc;
+  font-weight: 800;
 }
 
 .stat-val.green {
-  color: var(--status-green);
+  color: #3ddc84;
 }
 
 .stat-val.red {
-  color: var(--accent-celestius);
+  color: #f27042;
 }
 
 .result-actions {
-  margin-top: 0.25rem;
+  margin-top: 0.45rem;
 }
 
 .arena-action-btn {
-  display: inline-block;
-  padding: 0.75rem 2.2rem;
-  border-radius: 5px;
-  font-family: var(--font-mono);
-  font-size: 0.825rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 26px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12.5px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.12s ease;
 }
 
 .arena-action-btn.primary {
-  background: var(--status-green);
-  color: #0E0E10;
+  background: #3ddc84;
+  color: #09130d;
+  border: 2px solid #f5a524;
+  box-shadow: 0 4px 0 #166534, 0 10px 24px rgba(61, 220, 132, 0.26);
 }
 
 .arena-action-btn.primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
+  background: #53e795;
+  box-shadow: 0 4px 0 #1b7a40, 0 12px 28px rgba(61, 220, 132, 0.38);
+}
+
+.arena-action-btn.primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #166534;
 }
 
 .arena-action-btn.secondary {
-  background: var(--surface-subtle);
-  color: var(--text-primary);
-  border: 1px solid var(--surface-border);
+  background: #f27042;
+  color: #110b08;
+  border: 2px solid #f5a524;
+  box-shadow: 0 4px 0 #8a2f14, 0 10px 24px rgba(242, 112, 66, 0.28);
 }
 
 .arena-action-btn.secondary:hover {
-  background: #22222A;
-  transform: translateY(-1px);
+  background: #ff8257;
+  box-shadow: 0 4px 0 #a33818, 0 12px 28px rgba(242, 112, 66, 0.42);
+}
+
+.arena-action-btn.secondary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #8a2f14;
 }
 
 /* Dismissed Status Progress */

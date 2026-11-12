@@ -158,6 +158,22 @@ const useSecurity = (teamName, options = {}) => {
     }, [teamName]);
 
     useEffect(() => {
+        if (!passive) return;
+        transientShieldUntilRef.current = 0;
+        const overlayIds = [
+            'security-focus-shield',
+            'security-fullscreen-gate',
+            'security-devtools-gate',
+            'security-ai-gate'
+        ];
+        overlayIds.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        });
+        document.querySelectorAll('[id^="security-alert-"]').forEach((el) => el.remove());
+    }, [passive]);
+
+    useEffect(() => {
         if (passive) return undefined;
 
         const fetchSettings = async () => {
@@ -853,6 +869,9 @@ const useSecurity = (teamName, options = {}) => {
             if (blurTimer) clearTimeout(blurTimer);
             if (metaKeyTimer) clearTimeout(metaKeyTimer);
             if (transientShieldTimer) clearTimeout(transientShieldTimer);
+            transientShieldUntilRef.current = 0;
+            const activeShield = document.getElementById('security-focus-shield');
+            if (activeShield) activeShield.remove();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('blur', handleWindowBlur);
             window.removeEventListener('focus', handleWindowFocus);

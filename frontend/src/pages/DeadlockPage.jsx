@@ -321,17 +321,35 @@ const ResultView = ({ match, teamId, userTeam }) => {
             <div className="arena-result-view winner">
                 <WinnerBackground />
                 <div className="arena-result-card winner">
-                    <div className="result-crown-badge">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#F5A21F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/>
-                        </svg>
+                    <span className="loc-res-corner tl" aria-hidden="true" />
+                    <span className="loc-res-corner tr" aria-hidden="true" />
+                    <span className="loc-res-corner bl" aria-hidden="true" />
+                    <span className="loc-res-corner br" aria-hidden="true" />
+
+                    <div className="loc-res-divider" aria-hidden="true">
+                        <span className="loc-res-bracket">
+                            <span className="loc-res-hook left" />
+                            <span className="loc-res-dash" />
+                            <span className="loc-res-dash" />
+                        </span>
+                        <span className="loc-res-parallelogram winner">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" />
+                            </svg>
+                            <span>ROUND 01 // QUALIFIED</span>
+                        </span>
+                        <span className="loc-res-bracket">
+                            <span className="loc-res-dash" />
+                            <span className="loc-res-dash" />
+                            <span className="loc-res-hook right" />
+                        </span>
                     </div>
-                    <div className="result-tag-row">
-                        <span className="result-phase-pill">ROUND 01 // QUALIFIED</span>
+
+                    <div className="loc-res-title-top winner">VICTORY</div>
+                    <div className="loc-res-title-sub">
+                        <span>MAXIMUM AURA SECURED</span>
+                        <span className="loc-res-underscore" aria-hidden="true" />
                     </div>
-                    <h1 className="result-main-title winner">
-                        VICTORY // MAXIMUM AURA SECURED
-                    </h1>
                     <p className="result-subtitle">
                         PROPS TO DUO <strong className="team-highlight">{teamName}</strong>. YOU COOKED AND SURGED TO ROUND 02.
                     </p>
@@ -365,12 +383,37 @@ const ResultView = ({ match, teamId, userTeam }) => {
         <div className="arena-result-view loser">
             <LoserBackground />
             <div className="arena-result-card loser">
-                <div className="result-tag-row">
-                    <span className="result-phase-pill loser">ROUND 01 // ELIMINATED</span>
+                <span className="loc-res-corner tl" aria-hidden="true" />
+                <span className="loc-res-corner tr" aria-hidden="true" />
+                <span className="loc-res-corner bl" aria-hidden="true" />
+                <span className="loc-res-corner br" aria-hidden="true" />
+
+                <div className="loc-res-divider" aria-hidden="true">
+                    <span className="loc-res-bracket">
+                        <span className="loc-res-hook left" />
+                        <span className="loc-res-dash" />
+                        <span className="loc-res-dash" />
+                    </span>
+                    <span className="loc-res-parallelogram loser">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <span>ROUND 01 // ELIMINATED</span>
+                    </span>
+                    <span className="loc-res-bracket">
+                        <span className="loc-res-dash" />
+                        <span className="loc-res-dash" />
+                        <span className="loc-res-hook right" />
+                    </span>
                 </div>
-                <h1 className="result-main-title loser">
-                    DEFEAT // AURA DEPLETED
-                </h1>
+
+                <div className="loc-res-title-top loser">DEFEAT</div>
+                <div className="loc-res-title-sub">
+                    <span>AURA DEPLETED</span>
+                    <span className="loc-res-underscore" aria-hidden="true" />
+                </div>
                 <p className="result-subtitle">
                     GOOD FIGHT, DUO <strong className="team-highlight">{teamName}</strong>. KINETIC BEAM PULLED OFF GRID.
                 </p>
@@ -388,7 +431,7 @@ const ResultView = ({ match, teamId, userTeam }) => {
 
                 <div className="result-actions">
                     <a href="/crackTheCode" className="arena-action-btn secondary">
-                        EXIT ARENA
+                        EXIT ARENA &rarr;
                     </a>
                 </div>
             </div>
