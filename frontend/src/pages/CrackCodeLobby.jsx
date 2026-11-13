@@ -12,6 +12,7 @@ const CrackCodeLobby = ({ onGameReady, onEliminatedChange }) => {
     const [gameStatusLoading, setGameStatusLoading] = useState(true);
     const [teamStatus, setTeamStatus] = useState(null);
     const [globalStarted, setGlobalStarted] = useState(false);
+    const [globalEnded, setGlobalEnded] = useState(false);
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
     const teamId = localStorage.getItem("teamId");
@@ -50,6 +51,10 @@ const CrackCodeLobby = ({ onGameReady, onEliminatedChange }) => {
 
     const handleDownloadCertificates = async () => {
         if (!teamId || isDownloadingCertificates) return;
+        if (!globalEnded) {
+            setDownloadError("Participation certificates will become available once Round 02 has officially concluded.");
+            return;
+        }
         try {
             setIsDownloadingCertificates(true);
             setDownloadError(null);
@@ -93,6 +98,7 @@ const CrackCodeLobby = ({ onGameReady, onEliminatedChange }) => {
                 if (globalRes.ok) {
                     const data = await globalRes.json();
                     setGlobalStarted(data.started);
+                    setGlobalEnded(Boolean(data.ended));
                 }
 
                 // 2. Fetch Duo Match Status
@@ -309,28 +315,37 @@ const CrackCodeLobby = ({ onGameReady, onEliminatedChange }) => {
                         </div>
                     ) : isLoser ? (
                         <div className="loser-actions">
-                            <button
-                                onClick={handleDownloadCertificates}
-                                disabled={isDownloadingCertificates}
-                                className="cert-btn"
-                                title="Download both team member certificates"
-                            >
-                                {isDownloadingCertificates ? (
-                                    <>
+                            {globalEnded ? (
+                                <button
+                                    onClick={handleDownloadCertificates}
+                                    disabled={isDownloadingCertificates}
+                                    className="cert-btn"
+                                    title="Download both team member certificates"
+                                >
+                                    {isDownloadingCertificates ? (
+                                        <>
+                                            <i className="cur" />
+                                            <span>GENERATING CERTIFICATES...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                <polyline points="7 10 12 15 17 10" />
+                                                <line x1="12" y1="15" x2="12" y2="3" />
+                                            </svg>
+                                            <span>DOWNLOAD PARTICIPATION CERTIFICATES</span>
+                                        </>
+                                    )}
+                                </button>
+                            ) : (
+                                <div className="wait" style={{ marginTop: '0.25rem', marginBottom: '0.25rem' }}>
+                                    <span>
+                                        CERTIFICATES AVAILABLE AFTER ROUND 02 CONCLUDES
                                         <i className="cur" />
-                                        <span>GENERATING CERTIFICATES...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                            <polyline points="7 10 12 15 17 10" />
-                                            <line x1="12" y1="15" x2="12" y2="3" />
-                                        </svg>
-                                        <span>DOWNLOAD PARTICIPATION CERTIFICATES</span>
-                                    </>
-                                )}
-                            </button>
+                                    </span>
+                                </div>
+                            )}
 
                             {downloadError && (
                                 <div className="cert-error">{downloadError}</div>

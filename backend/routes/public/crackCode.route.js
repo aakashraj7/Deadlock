@@ -56,7 +56,10 @@ router.get("/session/:teamId", async (req, res) => {
     }
 
     // Check for existing submission
-    const submission = await CrackCodeSubmission.findOne({ teamId, crackCodeSessionId: session._id });
+    const [submission, state] = await Promise.all([
+      CrackCodeSubmission.findOne({ teamId, crackCodeSessionId: session._id }),
+      GameState.get(),
+    ]);
 
     return res.json({
       sessionId: session._id,
@@ -64,6 +67,8 @@ router.get("/session/:teamId", async (req, res) => {
       maxAttempts: session.maxAttempts,
       startedAt: session.startedAt,
       endedAt: session.endedAt || null,
+      roundEnded: Boolean(state.crackCodeEnded),
+      roundEndedAt: state.crackCodeEndedAt || null,
       question: toPublicQuestion(sessionQuestion(session)),
       submission: submission ? {
         isFirst: submission.finalWinner,
@@ -72,6 +77,9 @@ router.get("/session/:teamId", async (req, res) => {
           : submission.isCorrect
             ? "YOUR EFFORTS NEED TO BE APPRECIATED\nBUT SMALL TIME MANAGEMENT LACKING DECIDED SOMEOTHER AS WINNER. YOU CRACKED THE CODE..."
             : "THANK YOU FOR PARTICIPATION\nTHE GAME HAS ENDED"
+      } : (state.crackCodeEnded || session.endedAt) ? {
+        isFirst: false,
+        message: "ROUND 02 HAS CONCLUDED\nTHANK YOU FOR PARTICIPATING IN CRACK THE CODE"
       } : null
     });
   } catch (error) {
@@ -93,8 +101,15 @@ router.get("/eligible-teams", async (req, res) => {
 
 router.get("/global-status", async (req, res) => {
   try {
-    const sessionExists = await CrackCodeSession.findOne();
-    res.json({ started: !!sessionExists });
+    const [sessionExists, state] = await Promise.all([
+      CrackCodeSession.findOne().select("_id"),
+      GameState.get(),
+    ]);
+    res.json({
+      started: !!sessionExists,
+      ended: Boolean(state.crackCodeEnded),
+      endedAt: state.crackCodeEndedAt || null,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error fetching global status" });
   }
@@ -125,6 +140,23 @@ router.get("/certificate/:teamId", async (req, res) => {
       return res.status(400).json({ message: "Invalid Team ID" });
     }
 
+    // 1. Verify Round 02 has officially concluded
+    const state = await GameState.get();
+    if (!state.crackCodeEnded) {
+      return res.status(403).json({
+        message: "Participation certificates will become available once Round 02 has officially concluded.",
+      });
+    }
+
+    // 2. Winner check: The winning team is stored in the DB as champion and does not receive participation certificates
+    const winnerSubmission = await CrackCodeSubmission.findOne({ teamId, finalWinner: true });
+    if (winnerSubmission) {
+      return res.status(400).json({
+        message: "The winning team is registered as the Round 02 champion. Participation certificates are designated for non-winning participants.",
+      });
+    }
+
+    // 3. Generate & download certificates dynamically for non-winning team
     const { generateTeamCertificates } = require("../../utils/certificateGenerator");
     const { filePath, filename } = await generateTeamCertificates(teamId);
 

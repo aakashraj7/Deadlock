@@ -29,6 +29,16 @@ const gameStateSchema = new mongoose.Schema({
     crackCodeQuestionId: {
         type: String,
         default: null
+    },
+
+    // Crack the Code: Round 02 officially concluded
+    crackCodeEnded: {
+        type: Boolean,
+        default: false
+    },
+    crackCodeEndedAt: {
+        type: Date,
+        default: null
     }
 
 }, { timestamps: true });

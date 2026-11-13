@@ -24,13 +24,18 @@ const getSelectedQuestionId = async () => {
 */
 router.get("/questions", async (req, res) => {
   try {
-    const activeSession = await CrackCodeSession.findOne().select("questionId");
+    const [activeSession, state] = await Promise.all([
+      CrackCodeSession.findOne().select("questionId"),
+      GameState.get(),
+    ]);
     return res.json({
       questions: QUESTIONS.map(toAdminSummary),
       selectedQuestionId: await getSelectedQuestionId(),
       // While a round is running the question is locked to what the sessions were created with
       activeQuestionId: activeSession ? activeSession.questionId || DEFAULT_QUESTION_ID : null,
       locked: !!activeSession,
+      roundEnded: Boolean(state.crackCodeEnded),
+      roundEndedAt: state.crackCodeEndedAt || null,
     });
   } catch (error) {
     console.error("CrackCode QUESTIONS error:", error);
@@ -56,7 +61,13 @@ router.put("/question", async (req, res) => {
     }
     await GameState.updateOne(
       { key: "GLOBAL_STATE" },
-      { $set: { crackCodeQuestionId: questionId } },
+      {
+        $set: {
+          crackCodeQuestionId: questionId,
+          crackCodeEnded: false,
+          crackCodeEndedAt: null,
+        },
+      },
       { upsert: true }
     );
     return res.json({ message: "Question selected", selectedQuestionId: questionId });
@@ -97,7 +108,13 @@ router.post("/start", async (req, res) => {
     }
     await GameState.updateOne(
       { key: "GLOBAL_STATE" },
-      { $set: { crackCodeQuestionId: questionId } },
+      {
+        $set: {
+          crackCodeQuestionId: questionId,
+          crackCodeEnded: false,
+          crackCodeEndedAt: null,
+        },
+      },
       { upsert: true }
     );
 
@@ -169,13 +186,15 @@ router.delete("/reset", async (req, res) => {
     await CrackCodeSubmission.deleteMany({});
     await CrackCodeAttempt.deleteMany({});
 
-    // 2. Reset Glitch Availability (Keep the First Blood winner, but let them use the skill again)
+    // 2. Reset Glitch Availability and Round Ended flag
     await GameState.updateOne(
       { key: 'GLOBAL_STATE' },
       {
         $set: {
           glitchUsed: false,
-          glitchActiveUntil: null
+          glitchActiveUntil: null,
+          crackCodeEnded: false,
+          crackCodeEndedAt: null,
         }
       },
       { upsert: true }
@@ -193,15 +212,68 @@ router.delete("/reset", async (req, res) => {
 });
 
 /*
+  POST /admin/crack-code/end-round
+  - Concludes Round 02 officially.
+  - Finalizes all active sessions (endedAt = now).
+  - Flags GameState with crackCodeEnded = true, crackCodeEndedAt = now.
+  - Winner status in CrackCodeSubmission is preserved; all non-winning teams can now download participation certificates.
+*/
+router.post("/end-round", async (req, res) => {
+  try {
+    const now = new Date();
+
+    // 1. Mark GameState as ended
+    await GameState.updateOne(
+      { key: "GLOBAL_STATE" },
+      {
+        $set: {
+          crackCodeEnded: true,
+          crackCodeEndedAt: now,
+        },
+      },
+      { upsert: true }
+    );
+
+    // 2. Finalize all open sessions so live client editors lock immediately
+    await CrackCodeSession.updateMany(
+      { endedAt: null },
+      { $set: { endedAt: now } }
+    );
+
+    // 3. Find if a winner already exists
+    const winnerSubmission = await CrackCodeSubmission.findOne({ finalWinner: true })
+      .populate("teamId", "name members");
+
+    return res.json({
+      success: true,
+      message: "Round 02 has officially concluded. Participation certificates are now unlocked for non-winning teams.",
+      winner: winnerSubmission ? {
+        teamId: winnerSubmission.teamId._id,
+        teamName: winnerSubmission.teamId.name,
+        members: winnerSubmission.teamId.members,
+      } : null,
+      endedAt: now,
+    });
+  } catch (error) {
+    console.error("CrackCode END-ROUND error:", error);
+    return res.status(500).json({
+      message: "Internal server error while ending Round 02",
+      error: error.message,
+    });
+  }
+});
+
+/*
   GET /admin/crack-code/teams
   - Lists all teams with Crack the Code eligibility, session state, and submission/winner status
 */
 router.get("/teams", async (req, res) => {
   try {
-    const [teams, sessions, submissions] = await Promise.all([
+    const [teams, sessions, submissions, state] = await Promise.all([
       Team.find().select("name members deadlockResult currentRound crackCodeManuallyAdded").sort({ name: 1 }).lean(),
       CrackCodeSession.find().lean(),
       CrackCodeSubmission.find().lean(),
+      GameState.get(),
     ]);
 
     const sessionByTeam = new Map(sessions.map((s) => [String(s.teamId), s]));
@@ -236,6 +308,8 @@ router.get("/teams", async (req, res) => {
 
     return res.json({
       sessionActive: sessions.length > 0,
+      roundEnded: Boolean(state.crackCodeEnded),
+      roundEndedAt: state.crackCodeEndedAt || null,
       teams: formatted,
     });
   } catch (error) {

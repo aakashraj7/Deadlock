@@ -16,6 +16,8 @@ const LANGUAGE_OPTIONS = [
 const SUPPORTED_LANGUAGES = LANGUAGE_OPTIONS.map((opt) => opt.value);
 const RESULT_REVEAL_DELAY_MS = 250;
 
+const normalizeCode = (val) => (typeof val === 'string' ? val.replace(/\r\n/g, '\n') : '');
+
 const getDraftStorageKey = (teamId, sessionId) =>
     `crackCodeDraft:${teamId || 'anon'}:${sessionId || 'default'}`;
 
@@ -34,7 +36,7 @@ const readStoredCodeMap = (storageKey) => {
         const clean = {};
         for (const lang of SUPPORTED_LANGUAGES) {
             if (typeof parsed[lang] === 'string') {
-                clean[lang] = parsed[lang];
+                clean[lang] = normalizeCode(parsed[lang]);
             }
         }
         return clean;
@@ -45,7 +47,11 @@ const readStoredCodeMap = (storageKey) => {
 
 const writeStoredCodeMap = (storageKey, codeMapObj) => {
     try {
-        localStorage.setItem(storageKey, JSON.stringify(codeMapObj));
+        const normalized = {};
+        for (const key of Object.keys(codeMapObj || {})) {
+            normalized[key] = normalizeCode(codeMapObj[key]);
+        }
+        localStorage.setItem(storageKey, JSON.stringify(normalized));
     } catch {
         // Ignore storage quota errors
     }
@@ -216,6 +222,9 @@ const CrackTheCode = () => {
     const [sessionId, setSessionId] = useState(null);
     const [submissionResult, setSubmissionResult] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isRoundEnded, setIsRoundEnded] = useState(false);
+    const [isDownloadingCertificates, setIsDownloadingCertificates] = useState(false);
+    const [downloadError, setDownloadError] = useState(null);
 
     const [isRunning, setIsRunning] = useState(false);
     const [testResults, setTestResults] = useState({});
@@ -320,14 +329,17 @@ const CrackTheCode = () => {
         glitchUsed: false
     });
 
-    // --- GLITCH LOGIC ---
+    // --- GLITCH & STATUS POLLING ---
     useEffect(() => {
         const fetchGlitchStatus = async () => {
             try {
-                // 1. Check Global Status for Dismissal
-                const globalRes = await fetch(`${BASE_URL}/api/public/crack-code/global-status`);
+                // 1. Check Global Status
+                const globalRes = await fetch(`${BASE_URL}/api/public/crack-code/global-status?cb=${Date.now()}`);
                 if (globalRes.ok) {
                     const globalData = await globalRes.json();
+                    if (globalData.ended) {
+                        setIsRoundEnded(true);
+                    }
                     // If game was started but now global session is gone -> ADMIN DISMISSED
                     if (isGameStarted && !globalData.started && !submissionResult) {
                         setIsDismissed(true);
@@ -352,6 +364,9 @@ const CrackTheCode = () => {
                     }
                     if (teamSessionRes.ok) {
                         const teamSessionData = await teamSessionRes.json();
+                        if (teamSessionData.roundEnded) {
+                            setIsRoundEnded(true);
+                        }
                         if (teamSessionData.submission) {
                             setSubmissionResult(teamSessionData.submission);
                             return;
@@ -387,6 +402,60 @@ const CrackTheCode = () => {
         const interval = setInterval(fetchGlitchStatus, 2000);
         return () => clearInterval(interval);
     }, [isGameStarted, submissionResult]);
+
+    // Active polling for Round 02 official end when on submission/result screen
+    useEffect(() => {
+        if (!submissionResult) return;
+        let isMounted = true;
+        const pollPostGame = async () => {
+            try {
+                const res = await fetch(`${BASE_URL}/api/public/crack-code/global-status?cb=${Date.now()}`);
+                if (res.ok && isMounted) {
+                    const data = await res.json();
+                    setIsRoundEnded(Boolean(data.ended));
+                }
+            } catch {
+                // Ignore polling errors
+            }
+        };
+        pollPostGame();
+        const interval = setInterval(pollPostGame, 2000);
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
+    }, [submissionResult]);
+
+    const handleDownloadCertificates = async () => {
+        const teamId = localStorage.getItem("teamId");
+        if (!teamId || isDownloadingCertificates) return;
+        try {
+            setIsDownloadingCertificates(true);
+            setDownloadError(null);
+
+            const res = await fetch(`${BASE_URL}/api/public/crack-code/certificate/${teamId}`);
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || "Failed to download certificates");
+            }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            const filename = `${(teamName || "Team").replace(/\s+/g, "_")}_Certificates.zip`;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (err) {
+            console.error("Certificate download error:", err);
+            setDownloadError(err.message || "Could not generate certificates. Please try again.");
+        } finally {
+            setIsDownloadingCertificates(false);
+        }
+    };
 
     const handleActivateGlitch = async () => {
         const teamId = localStorage.getItem("teamId");
@@ -465,6 +534,8 @@ const CrackTheCode = () => {
         setLastValidated((prev) => (prev?.language === lang ? null : prev));
         setSubmitError(null);
     }, [sessionId]);
+
+    const clearSubmitError = React.useCallback(() => setSubmitError(null), []);
 
     const handleEditorDidMount = React.useCallback((editor, monaco) => {
         monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
@@ -682,6 +753,9 @@ const CrackTheCode = () => {
                         // Ignore storage errors
                     }
                 }
+                if (sessionData.roundEnded) {
+                    setIsRoundEnded(true);
+                }
                 if (sessionData.submission) {
                     setSubmissionResult(sessionData.submission);
                 } else {
@@ -767,12 +841,47 @@ const CrackTheCode = () => {
                             </li>
                         </ul>
 
-                        <div className="wait">
-                            <span>
-                                session locked · awaiting referee
-                                <i className="cur" />
-                            </span>
-                        </div>
+                        {isFirst ? (
+                            <div className="wait">
+                                <span>
+                                    CHAMPION VERIFIED · TOURNAMENT RECORD SECURED
+                                    <i className="cur" />
+                                </span>
+                            </div>
+                        ) : isRoundEnded ? (
+                            <div className="loser-actions" style={{ marginTop: '1.25rem' }}>
+                                <button
+                                    onClick={handleDownloadCertificates}
+                                    disabled={isDownloadingCertificates}
+                                    className="cert-btn"
+                                    title="Download both team member participation certificates"
+                                >
+                                    {isDownloadingCertificates ? (
+                                        <>
+                                            <i className="cur" />
+                                            <span>GENERATING CERTIFICATES...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                <polyline points="7 10 12 15 17 10" />
+                                                <line x1="12" y1="15" x2="12" y2="3" />
+                                            </svg>
+                                            <span>DOWNLOAD PARTICIPATION CERTIFICATES</span>
+                                        </>
+                                    )}
+                                </button>
+                                {downloadError && <div className="cert-error">{downloadError}</div>}
+                            </div>
+                        ) : (
+                            <div className="wait">
+                                <span>
+                                    session locked · certificates available after Round 02 ends
+                                    <i className="cur" />
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </main>
 
@@ -850,7 +959,7 @@ const CrackTheCode = () => {
                     isSubmitting={isSubmitting}
                     isSubmitEnabled={isSubmitEnabled}
                     submitError={submitError}
-                    clearSubmitError={() => setSubmitError(null)}
+                    clearSubmitError={clearSubmitError}
                     handleLanguageChange={handleLanguageChange}
                     handleRun={handleRun}
                     handleSubmit={handleSubmit}
@@ -1299,8 +1408,8 @@ const RightPanel = React.memo(({
     handleSubmit, handleCodeChange, handleCodeImmediate, handleResetLanguage, handleEditorDidMount,
     security
 }) => {
-    // Local state for debounced editor updates
-    const [localCode, setLocalCode] = useState(code);
+    const editorRef = React.useRef(null);
+    const codeSyncTimerRef = React.useRef(null);
     const [resetModalOpen, setResetModalOpen] = useState(false);
     const [resetModalClosing, setResetModalClosing] = useState(false);
     const [isResetting, setIsResetting] = useState(false);
@@ -1310,29 +1419,48 @@ const RightPanel = React.memo(({
     useEffect(() => () => {
         if (modalTimerRef.current) clearTimeout(modalTimerRef.current);
         if (resetAnimTimerRef.current) clearTimeout(resetAnimTimerRef.current);
+        if (codeSyncTimerRef.current) clearTimeout(codeSyncTimerRef.current);
     }, []);
 
-    // Sync local code when language changes
-    useEffect(() => {
-        setLocalCode(code);
-    }, [language, code]);
+    const onMountInternal = React.useCallback((editor, monaco) => {
+        editorRef.current = editor;
+        if (handleEditorDidMount) {
+            handleEditorDidMount(editor, monaco);
+        }
+    }, [handleEditorDidMount]);
 
-    // Handle high-frequency changes locally
-    const onInternalChange = (value) => {
-        const next = value ?? "";
-        setLocalCode(next);
+    // Handle high-frequency changes from Monaco typing without resetting the editor model
+    const onInternalChange = React.useCallback((value) => {
+        const next = normalizeCode(value);
         handleCodeImmediate(language, next);
-    };
 
-    // Debounce the global state sync
+        // Debounce background state sync
+        if (codeSyncTimerRef.current) clearTimeout(codeSyncTimerRef.current);
+        codeSyncTimerRef.current = setTimeout(() => {
+            handleCodeChange(next);
+        }, 800);
+    }, [handleCodeImmediate, handleCodeChange, language]);
+
+    // Safely sync code ONLY when it genuinely changes externally (language switch / reset / external load)
     useEffect(() => {
-        const timer = setTimeout(() => {
-            if (localCode !== code) {
-                handleCodeChange(localCode);
-            }
-        }, 500);
-        return () => clearTimeout(timer);
-    }, [localCode, handleCodeChange, code]);
+        const editor = editorRef.current;
+        if (!editor) return;
+
+        const normalizedIncoming = normalizeCode(code);
+        const currentModelVal = normalizeCode(editor.getValue());
+
+        // If editor already holds this text (e.g. from typing), NEVER touch the model to avoid cursor jumping
+        if (currentModelVal === normalizedIncoming) return;
+
+        const pos = editor.getPosition();
+        const viewState = editor.saveViewState();
+        editor.setValue(normalizedIncoming);
+        if (viewState) {
+            editor.restoreViewState(viewState);
+        } else if (pos) {
+            editor.setPosition(pos);
+        }
+    }, [code]);
 
     const openResetModal = React.useCallback(() => {
         if (modalTimerRef.current) clearTimeout(modalTimerRef.current);
@@ -1359,8 +1487,14 @@ const RightPanel = React.memo(({
             return;
         }
         closeResetModal();
-        setLocalCode(starterCode);
-        handleResetLanguage(language, starterCode);
+        const normalizedStarter = normalizeCode(starterCode);
+
+        if (editorRef.current) {
+            editorRef.current.setValue(normalizedStarter);
+            editorRef.current.setPosition({ lineNumber: 1, column: 1 });
+            editorRef.current.focus();
+        }
+        handleResetLanguage(language, normalizedStarter);
 
         setIsResetting(false);
         if (resetAnimTimerRef.current) clearTimeout(resetAnimTimerRef.current);
@@ -1380,6 +1514,23 @@ const RightPanel = React.memo(({
     const otherLanguagesText = otherLanguageLabels.length > 1
         ? `${otherLanguageLabels.slice(0, -1).join(', ')}, and ${otherLanguageLabels[otherLanguageLabels.length - 1]}`
         : (otherLanguageLabels[0] || 'other languages');
+
+    const editorOptions = React.useMemo(() => ({
+        minimap: { enabled: false },
+        fontSize: 14,
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        quickSuggestions: { other: true, comments: true, strings: true },
+        parameterHints: { enabled: true },
+        suggestOnTriggerCharacters: true,
+        acceptSuggestionOnEnter: "on",
+        tabCompletion: "on",
+        contextmenu: !security?.disableCopyPaste && !security?.disableTextSelection && !security?.blockDevTools && !security?.blockAiAssistant,
+        copySelection: !security?.disableCopyPaste,
+        links: false,
+        dragAndDrop: false,
+        selectionClipboard: false
+    }), [security?.disableCopyPaste, security?.disableTextSelection, security?.blockDevTools, security?.blockAiAssistant]);
 
     return (
         <div className="panel right-panel">
@@ -1439,28 +1590,14 @@ const RightPanel = React.memo(({
 
             <div className={`monaco-wrapper ${isResetting ? 'is-resetting' : ''}`} style={{ display: 'flex', flexDirection: 'column' }}>
                 <Editor
+                    key={language}
                     height="100%"
                     language={language === 'cpp' ? 'cpp' : language}
                     theme="vs-dark"
-                    value={localCode}
+                    defaultValue={normalizeCode(code)}
                     onChange={onInternalChange}
-                    onMount={handleEditorDidMount}
-                    options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        quickSuggestions: { other: true, comments: true, strings: true },
-                        parameterHints: { enabled: true },
-                        suggestOnTriggerCharacters: true,
-                        acceptSuggestionOnEnter: "on",
-                        tabCompletion: "on",
-                        contextmenu: !security.disableCopyPaste && !security.disableTextSelection && !security.blockDevTools && !security.blockAiAssistant,
-                        copySelection: !security.disableCopyPaste,
-                        links: false,
-                        dragAndDrop: false,
-                        selectionClipboard: false
-                    }}
+                    onMount={onMountInternal}
+                    options={editorOptions}
                 />
             </div>
 

@@ -130,11 +130,11 @@ const DeadlockPage = () => {
     useEffect(() => {
         if (!currentQuestion) return;
 
-        // Use templates from the question object
+        // Use templates from the question object (normalized to LF)
         setCodes({
-            python: currentQuestion.templates?.python || "",
-            cpp: currentQuestion.templates?.cpp || "",
-            java: currentQuestion.templates?.java || ""
+            python: (currentQuestion.templates?.python || "").replace(/\r\n/g, "\n"),
+            cpp: (currentQuestion.templates?.cpp || "").replace(/\r\n/g, "\n"),
+            java: (currentQuestion.templates?.java || "").replace(/\r\n/g, "\n")
         });
     }, [currentQuestion?._id]);
 
@@ -282,6 +282,7 @@ const DeadlockPage = () => {
 
                 <div className="editor-section">
                     <CodePanel
+                        key={`${currentQuestion?._id || 'init'}_${language}`}
                         code={codes[language]}
                         setCode={(newCode) => setCodes(prev => ({ ...prev, [language]: newCode }))}
                         language={language}

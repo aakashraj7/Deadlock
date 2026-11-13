@@ -8,6 +8,7 @@ const CrackCodeAdmin = () => {
     const [status, setStatus] = useState(null);
     const [eligibleCount, setEligibleCount] = useState(0);
     const [isSessionActive, setIsSessionActive] = useState(false);
+    const [isRoundEnded, setIsRoundEnded] = useState(false);
     const [winnerInfo, setWinnerInfo] = useState(null);
     const [questions, setQuestions] = useState([]);
     const [selectedQuestionId, setSelectedQuestionId] = useState(null);
@@ -26,9 +27,10 @@ const CrackCodeAdmin = () => {
             setEligibleCount(eligibleData.count || 0);
 
             // Check global session status
-            const statusRes = await fetch(`${BASE_URL}/api/public/crack-code/global-status`);
+            const statusRes = await fetch(`${BASE_URL}/api/public/crack-code/global-status?cb=${Date.now()}`);
             const statusData = await statusRes.json();
             setIsSessionActive(statusData.started);
+            setIsRoundEnded(Boolean(statusData.ended));
 
             // Question bank + current selection
             const questionsRes = await adminFetch(`${BASE_URL}/api/admin/crack-code/questions`);
@@ -150,6 +152,37 @@ const CrackCodeAdmin = () => {
         }
     };
 
+    const handleEndRound = async () => {
+        if (!window.confirm("CONFIRM END ROUND 02: This will conclude the competition, lock all active participant code editors, and release participation certificates for non-winning teams. Proceed?")) return;
+
+        setLoading(true);
+        setStatus({ type: 'info', message: 'CONCLUDING ROUND 02...' });
+
+        try {
+            const response = await adminFetch(`${BASE_URL}/api/admin/crack-code/end-round`, {
+                method: 'POST',
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (response.ok) {
+                setStatus({
+                    type: 'success',
+                    message: data.message || 'ROUND 02 CONCLUDED. PARTICIPATION CERTIFICATES UNLOCKED.',
+                });
+                await fetchStatus();
+            } else {
+                setStatus({
+                    type: 'error',
+                    message: data.message || 'FAILED TO END ROUND 02.',
+                });
+            }
+        } catch {
+            setStatus({ type: 'error', message: 'NETWORK INTERRUPT: END ROUND FAILED.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleToggleEligibility = async (team) => {
         const nextEligible = !team.eligible;
         if (!nextEligible && team.sessionActive) {
@@ -241,8 +274,8 @@ const CrackCodeAdmin = () => {
                     <div className="status-grid">
                         <div className="status-item">
                             <span className="label">ENGINE STATE:</span>
-                            <span className={`value ${loading ? 'active' : (isSessionActive ? 'idle' : (eligibleCount > 0 ? 'standby' : 'error'))}`}>
-                                {loading ? 'PROCESSING...' : (isSessionActive ? 'SESSION ACTIVE' : (eligibleCount > 0 ? 'READY' : 'NO TEAMS'))}
+                            <span className={`value ${loading ? 'active' : (isRoundEnded ? 'safe' : (isSessionActive ? 'idle' : (eligibleCount > 0 ? 'standby' : 'error')))}`}>
+                                {loading ? 'PROCESSING...' : (isRoundEnded ? 'ROUND 02 CONCLUDED' : (isSessionActive ? 'SESSION ACTIVE' : (eligibleCount > 0 ? 'READY' : 'NO TEAMS')))}
                             </span>
                         </div>
                         <div className="status-item">
@@ -297,14 +330,33 @@ const CrackCodeAdmin = () => {
                     </div>
 
                     <div className="main-action">
-                        <button
-                            className={`deploy-button ${loading ? 'loading' : ''} ${isSessionActive ? 'disabled' : ''}`}
-                            onClick={handleStartSession}
-                            disabled={loading || isSessionActive || !selectedQuestionId}
-                        >
-                            <span className="btn-glitch-bg"></span>
-                            <span className="btn-text">{loading ? 'BOOTING...' : (isSessionActive ? 'SESSION IN PROGRESS' : 'START SESSION')}</span>
-                        </button>
+                        {!isSessionActive && (
+                            <button
+                                className={`deploy-button ${loading ? 'loading' : ''}`}
+                                onClick={handleStartSession}
+                                disabled={loading || !selectedQuestionId}
+                            >
+                                <span className="btn-glitch-bg"></span>
+                                <span className="btn-text">{loading ? 'BOOTING...' : 'START SESSION'}</span>
+                            </button>
+                        )}
+
+                        {isSessionActive && (
+                            <div className="session-active-actions">
+                                <button
+                                    className={`end-round-button ${isRoundEnded ? 'is-ended' : ''}`}
+                                    onClick={handleEndRound}
+                                    disabled={loading || isRoundEnded}
+                                >
+                                    {isRoundEnded ? '✓ ROUND 02 CONCLUDED' : 'END ROUND 02'}
+                                </button>
+                                <div className="session-status-subnote">
+                                    {isRoundEnded
+                                        ? 'PARTICIPATION CERTIFICATES UNLOCKED FOR ALL NON-WINNING TEAMS'
+                                        : 'ACTIVE LIVE RUN · CLICK "END ROUND 02" TO FINALIZE COMPETITION'}
+                                </div>
+                            </div>
+                        )}
 
                         <button
                             className="reset-button"

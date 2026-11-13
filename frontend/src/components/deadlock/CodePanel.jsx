@@ -8,7 +8,10 @@ const DEADLOCK_LANGUAGES = [
     { value: 'java', label: 'Java 17', tag: 'jdk17' },
 ];
 
-const CodePanel = ({ code, setCode, language, setLanguage, isLocked, onSubmitShortcut, security: securityProp }) => {
+const normalizeCode = (val) => (typeof val === 'string' ? val.replace(/\r\n/g, '\n') : '');
+
+const CodePanel = React.memo(({ code, setCode, language, setLanguage, isLocked, onSubmitShortcut, security: securityProp }) => {
+    const editorRef = useRef(null);
     const teamName = localStorage.getItem('teamName') || 'UNKNOWN';
     const { security: fallbackSecurity } = useSecurity(teamName, { passive: Boolean(securityProp) });
     const security = securityProp || fallbackSecurity;
@@ -98,6 +101,7 @@ const CodePanel = ({ code, setCode, language, setLanguage, isLocked, onSubmitSho
     };
 
     const handleEditorDidMount = (editor, monaco) => {
+        editorRef.current = editor;
         // Register Ctrl+Enter and Cmd+Enter shortcut directly within Monaco editor
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
             if (onSubmitShortcutRef.current && !isLockedRef.current) {
@@ -105,6 +109,43 @@ const CodePanel = ({ code, setCode, language, setLanguage, isLocked, onSubmitSho
             }
         });
     };
+
+    // Safely sync code ONLY when it genuinely changes externally (language switch / question template change)
+    useEffect(() => {
+        const editor = editorRef.current;
+        if (!editor) return;
+
+        const normalizedIncoming = normalizeCode(code);
+        const currentModelVal = normalizeCode(editor.getValue());
+
+        // If the editor already holds this text (e.g. from active typing), NEVER call setValue to prevent cursor jumping!
+        if (currentModelVal === normalizedIncoming) return;
+
+        const pos = editor.getPosition();
+        const viewState = editor.saveViewState();
+        editor.setValue(normalizedIncoming);
+        if (viewState) {
+            editor.restoreViewState(viewState);
+        } else if (pos) {
+            editor.setPosition(pos);
+        }
+    }, [code]);
+
+    const editorOptions = React.useMemo(() => ({
+        readOnly: isLocked,
+        minimap: { enabled: false },
+        fontSize: 14,
+        fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+        scrollBeyondLastLine: false,
+        padding: { top: 12, bottom: 12 },
+        lineNumbersMinChars: 3,
+        contextmenu: !security?.disableCopyPaste && !security?.disableTextSelection && !security?.blockDevTools && !security?.blockAiAssistant,
+        copySelection: !security?.disableCopyPaste,
+        links: false,
+        dragAndDrop: false,
+        selectionClipboard: false,
+        automaticLayout: true,
+    }), [isLocked, security?.disableCopyPaste, security?.disableTextSelection, security?.blockDevTools, security?.blockAiAssistant]);
 
     return (
         <div className="clean-code-panel">
@@ -186,31 +227,18 @@ const CodePanel = ({ code, setCode, language, setLanguage, isLocked, onSubmitSho
             {/* Monaco Editor Container */}
             <div className="clean-monaco-wrap" onPaste={handlePaste}>
                 <Editor
+                    key={language}
                     height="100%"
                     language={language}
                     theme="vs-dark"
-                    value={code}
-                    onChange={setCode}
+                    defaultValue={normalizeCode(code)}
+                    onChange={(val) => setCode(normalizeCode(val))}
                     onMount={handleEditorDidMount}
-                    options={{
-                        readOnly: isLocked,
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-                        scrollBeyondLastLine: false,
-                        padding: { top: 12, bottom: 12 },
-                        lineNumbersMinChars: 3,
-                        contextmenu: !security.disableCopyPaste && !security.disableTextSelection && !security.blockDevTools && !security.blockAiAssistant,
-                        copySelection: !security.disableCopyPaste,
-                        links: false,
-                        dragAndDrop: false,
-                        selectionClipboard: false,
-                        automaticLayout: true,
-                    }}
+                    options={editorOptions}
                 />
             </div>
         </div>
     );
-};
+});
 
 export default CodePanel;
